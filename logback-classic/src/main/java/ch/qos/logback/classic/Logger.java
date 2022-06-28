@@ -202,6 +202,27 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
     }
 
     /**
+     * This method is invoked by parent logger to let this logger know that the
+     * prent's logging event transformer have changed.
+     *
+     * @param transformer the new logging event transformer to set
+     */
+    private synchronized void handleParentLoggingEventTransformerChange(ILoggingEventTransformer transformer) {
+        // changes in the parent logging event transformer affect children only if their logging event transformer is
+        // null
+        if (loggingEventTransformer == null) {
+            loggingEventTransformer = transformer;
+
+            // propagate the parent logging event transformer change to this logger's children
+            if (childrenList != null) {
+                for (Logger child : childrenList) {
+                    child.handleParentLoggingEventTransformerChange(transformer);
+                }
+            }
+        }
+    }
+
+    /**
      * Remove all previously added appenders from this logger instance.
      * <p/>
      * This is useful when re-reading configuration information.
@@ -363,6 +384,7 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
         childLogger = new Logger(childName, this, this.loggerContext);
         childrenList.add(childLogger);
         childLogger.effectiveLevelInt = this.effectiveLevelInt;
+        childLogger.loggingEventTransformer = this.loggingEventTransformer;
         return childLogger;
     }
 
@@ -742,7 +764,22 @@ public final class Logger implements org.slf4j.Logger, LocationAwareLogger, Appe
     }
 
     public void setLoggingEventTransformer(ILoggingEventTransformer loggingEventTransformer) {
+        if (this.loggingEventTransformer == loggingEventTransformer) {
+            // nothing to do;
+            return;
+        }
+
         this.loggingEventTransformer = loggingEventTransformer;
+        if (this.loggingEventTransformer == null) {
+            this.loggingEventTransformer = parent.loggingEventTransformer;
+        }
+
+        if (childrenList != null) {
+            for (Logger child : childrenList) {
+                // tell child to handle parent levelInt change
+                child.handleParentLoggingEventTransformerChange(loggingEventTransformer);
+            }
+        }
     }
 
     public String toString() {
